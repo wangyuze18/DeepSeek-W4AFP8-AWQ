@@ -22,6 +22,7 @@ from quantization_core.weight_ops import (
     fake_quant_dequant,
     quantize_weight_int,
 )
+from modules.qlinear.kernel import pseudo_quantize_tensor_per_tensor_fp8_triton
 from quantization_core.scaling import apply_scale, apply_clip
 from utils.helpers import get_best_device, clear_memory, append_str_prefix
 from utils.layer_config import exclude_layers_to_not_quantize, get_layers_for_scaling
@@ -70,6 +71,7 @@ class AwqQuantizer:
         split: str,
         text_column: str,
         duo_scaling: bool,
+        act_qd: bool = False,
         apply_clip: bool = True,
         n_parallel_calib_samples: Optional[int] = None,
         max_calib_samples: int = 128,
@@ -90,6 +92,7 @@ class AwqQuantizer:
         self.max_calib_samples = max_calib_samples
         self.max_calib_seq_len = max_calib_seq_len
         self.max_chunk_memory = max_chunk_memory
+        self.act_qd = act_qd
 
         self.modules, self.module_kwargs, self.inps = self._init_quant(
             n_samples=self.max_calib_samples, max_seq_len=self.max_calib_seq_len
@@ -353,6 +356,9 @@ class AwqQuantizer:
                 fc.weight.data = (
                     self.pseudo_quantize_tensor(fc.weight.data)[0] / scales_view
                 )
+
+            if self.act_qd:
+                x = pseudo_quantize_tensor_per_tensor_fp8_triton(x)
 
             # Measure reconstruction error
             int_w_output = self._module_forward(x, module2inspect, kwargs)

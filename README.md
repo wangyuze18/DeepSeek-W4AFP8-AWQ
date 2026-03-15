@@ -97,6 +97,7 @@ python main.py \
 | `--zero_point` | flag | False | Enable asymmetric (zero-point) quantization |
 | `--calib_data` | str | pileval | Calibration dataset (`pileval`, `ultrachat`, `c4`, `wikitext`, `sharegpt4`, or any HF dataset) |
 | `--split` | str | train | Dataset split |
+| `--act_qd`| flag | False | activation fp8 fakequant |
 | `--text_column` | str | text | Text column name in the dataset |
 | `--max_calib_samples` | int | 128 | Number of calibration samples |
 | `--max_calib_seq_len` | int | 512 | Maximum calibration sequence length |

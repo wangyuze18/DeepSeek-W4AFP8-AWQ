@@ -10,6 +10,163 @@ import triton
 import triton.language as tl
 from triton import Config
 
+# ---------------------------------------------------------------------------
+# Activation per tensor quantization
+# ---------------------------------------------------------------------------
+
+@triton.jit
+def _fp8_dqd_kernel(
+    x_ptr,           # 输入指针
+    out_ptr,         # 输出指针
+    scale_ptr,       # scale指针 (per-row)
+    n_cols,          # 每行的元素数量
+    BLOCK_SIZE: tl.constexpr,
+):
+    """
+    FP8 DQD Kernel 
+    """
+    row_idx = tl.program_id(0)
+    
+    scale = tl.load(scale_ptr + row_idx)
+    
+    col_offsets = tl.arange(0, BLOCK_SIZE)
+    
+    for start in range(0, n_cols, BLOCK_SIZE):
+        cols = start + col_offsets
+        mask = cols < n_cols
+        
+        offset = row_idx * n_cols + cols
+        
+        x = tl.load(x_ptr + offset, mask=mask, other=0.0)
+        
+        x_scaled = x * scale
+        
+        FP8_MAX = 448.0
+        x_clamped = tl.minimum(tl.maximum(x_scaled, -FP8_MAX), FP8_MAX)
+        
+        x_fp8 = x_clamped.to(tl.float8e4nv)
+        x_dequant = x_fp8.to(tl.float32)
+        
+
+        result = x_dequant / scale
+
+        tl.store(out_ptr + offset, result, mask=mask)
+ 
+ 
+@triton.jit
+def _compute_scale_kernel(
+    x_ptr,
+    scale_ptr,
+    n_cols,
+    BLOCK_SIZE: tl.constexpr,
+):
+    """
+    计算每行的scale: scale = FP8_MAX / max(|x|)
+    """
+    row_idx = tl.program_id(0)
+    
+    max_val = 0.0
+    
+    col_offsets = tl.arange(0, BLOCK_SIZE)
+
+    for start in range(0, n_cols, BLOCK_SIZE):
+        cols = start + col_offsets
+        mask = cols < n_cols
+        offset = row_idx * n_cols + cols
+        
+        x = tl.load(x_ptr + offset, mask=mask, other=0.0)
+        max_val = tl.maximum(max_val, tl.max(tl.abs(x), axis=0))
+
+    FP8_MAX = 448.0  # torch.finfo(torch.float8_e4m3fn).max
+    EPS = 1e-12
+    scale = FP8_MAX / tl.maximum(max_val, EPS)
+    
+    tl.store(scale_ptr + row_idx, scale)
+ 
+ 
+@triton.jit
+def _fp8_dqd_fused_kernel(
+    x_ptr,
+    out_ptr,
+    n_cols,
+    BLOCK_SIZE: tl.constexpr,
+):
+
+    row_idx = tl.program_id(0)
+    
+    col_offsets = tl.arange(0, BLOCK_SIZE)
+    mask = col_offsets < n_cols
+    offset = row_idx * n_cols + col_offsets
+
+    x = tl.load(x_ptr + offset, mask=mask, other=0.0)
+
+    abs_x = tl.abs(x)
+    max_val = tl.max(abs_x, axis=0)
+
+    FP8_MAX: tl.constexpr = 448.0
+    EPS: tl.constexpr = 1e-12
+    scale = FP8_MAX / tl.maximum(max_val, EPS)
+
+    x_scaled = x * scale
+    
+    x_fp8 = x_scaled.to(tl.float8e4nv)
+    x_dequant = x_fp8.to(tl.float32)
+
+    result = x_dequant / scale
+
+    tl.store(out_ptr + offset, result, mask=mask)
+ 
+ 
+def pseudo_quantize_tensor_per_tensor_fp8_triton(x: torch.Tensor) -> torch.Tensor:
+    """
+    Triton实现的per-row FP8 DQD
+    
+    Args:
+        x: 输入tensor，shape为 (batch, ...) 
+           会被reshape为 (batch, -1) 处理
+    
+    Returns:
+        与输入相同shape的反量化tensor
+    """
+    original_shape = x.shape
+    original_dtype = x.dtype
+
+    if x.ndim == 1:
+        x_2d = x.unsqueeze(0)
+    else:
+        x_2d = x.reshape(x.shape[0], -1)
+    
+    n_rows, n_cols = x_2d.shape
+    
+    x_2d = x_2d.float().contiguous()
+
+    out = torch.empty_like(x_2d)
+    
+    BLOCK_SIZE = triton.next_power_of_2(n_cols)
+    
+    if BLOCK_SIZE <= 65536:  
+        _fp8_dqd_fused_kernel[(n_rows,)](
+            x_2d, out, n_cols,
+            BLOCK_SIZE=BLOCK_SIZE,
+        )
+    else:  
+        BLOCK_SIZE = 4096
+        scale = torch.empty(n_rows, device=x.device, dtype=torch.float32)
+        
+        _compute_scale_kernel[(n_rows,)](
+            x_2d, scale, n_cols,
+            BLOCK_SIZE=BLOCK_SIZE,
+        )
+        
+        _fp8_dqd_kernel[(n_rows,)](
+            x_2d, out, scale, n_cols,
+            BLOCK_SIZE=BLOCK_SIZE,
+        )
+
+    out = out.reshape(original_shape).to(original_dtype)
+    
+    return out
+
 
 # ---------------------------------------------------------------------------
 # Activation quantization

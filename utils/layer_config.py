@@ -23,6 +23,7 @@ IGNORE_LAYER_KEYWORDS = [
     "norm",
     "embed_tokens",
     "mlp.gate.",
+    "indexer"
 ]
 
 
@@ -83,6 +84,7 @@ def get_layers_for_scaling(module, input_feat: Dict, module_kwargs: Dict) -> Lis
             )
         )
 
+        # breakpoint()
         # Per-expert linear-out groups
         for i, expert in enumerate(module.mlp.experts):
             layers.append(

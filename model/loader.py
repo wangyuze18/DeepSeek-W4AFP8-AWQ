@@ -17,9 +17,13 @@ from safetensors import safe_open
 from tqdm import tqdm
 from transformers import AutoConfig
 
-from models.modeling_deepseek_v3_dot_1 import DeepseekV3ForCausalLM
+from models.modeling_deepseek_v3_dot_1 import DeepseekV3ForCausalLM as dsv31
+from models.modeling_deepseek_v3_dot_2 import DeepseekV3ForCausalLM as dsv32
+from models.configuration_deepseek_v3_dot_2 import DeepseekV32Config as dsv32_config
 from modules.qlinear.kernel import weight_cast_to_bf16
 
+
+AVAILABLE_MODELS=["DeepSeekV31", "DeepSeekV32"]
 
 def load_model(args):
     """
@@ -37,7 +41,13 @@ def load_model(args):
     Returns:
         The loaded model with BF16 weights.
     """
-    config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
+    if args.model_name == "DeepSeekV31":
+        config = AutoConfig.from_pretrained(args.model_path, trust_remote_code=True)
+    elif args.model_name == "DeepSeekV32":
+        config = dsv32_config.from_pretrained(args.model_path, trust_remote_code=True)
+    else:
+        raise ValueError(f"Unsupported model name: {args.model_name}")
+
     config.use_cache = False
 
     if args.test_mode:
@@ -45,7 +55,12 @@ def load_model(args):
 
     # Initialize model with empty (meta) tensors
     with init_empty_weights():
-        model = DeepseekV3ForCausalLM._from_config(config=config)
+        if args.model_name == "DeepSeekV31":
+            model = dsv31._from_config(config=config)
+        elif args.model_name == "DeepSeekV32":
+            model = dsv32._from_config(config=config)
+        else:
+            raise ValueError(f"Unsupported model name: {args.model_name}")
 
     # Build state dict with scale inverse placeholders for quantized layers
     state_dict = model.state_dict()
@@ -54,7 +69,7 @@ def load_model(args):
         new_state_dict[name] = value
         if not any(
             kw in name
-            for kw in ["norm", "lm_head", "embed_tokens", ".mlp.gate."]
+            for kw in ["norm", "lm_head", "embed_tokens", ".mlp.gate.", ".indexer.weights_proj" , ]
         ):
             prefix = name.split(".weight")[0]
             new_state_dict[prefix + ".weight_scale_inv"] = None
@@ -105,4 +120,4 @@ def load_model(args):
 
     model.load_state_dict(new_state_dict, assign=True)
     gc.collect()
-    return model
+    return model,config

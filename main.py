@@ -16,7 +16,7 @@ import argparse
 from transformers import AutoTokenizer
 from huggingface_hub import save_torch_state_dict
 
-from model.loader import load_model
+from model.loader import load_model,AVAILABLE_MODELS
 from quantization_core.quantizer import AwqQuantizer
 from conversion.sglang import convert_to_sglang, load_indexer_weights
 
@@ -26,6 +26,14 @@ def parse_args():
         description="AWQ Quantization for LLMs (targeted at MoE models like DeepSeek-V3)"
     )
 
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        required=True,
+        choices=AVAILABLE_MODELS,
+        default="DeepSeekV31"
+    )
+    
     # Model paths
     parser.add_argument(
         "--model_path",
@@ -59,6 +67,13 @@ def parse_args():
         action="store_true",
         default=False,
         help="Use asymmetric (zero-point) quantization",
+    )
+
+    parser.add_argument(
+        "--act_qd",
+        action="store_true",
+        default=False,
+        help="activation fp8 fakequant "
     )
 
     # Calibration dataset
@@ -126,7 +141,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
 
     print("Loading model...")
-    model = load_model(args)
+    model,config = load_model(args)
     model.eval()
 
     print("Initializing AWQ quantizer...")
@@ -136,6 +151,7 @@ def main():
         w_bit=args.w_bit,
         group_size=args.group_size,
         zero_point=args.zero_point,
+        act_qd = args.act_qd,
         calib_data=args.calib_data,
         split=args.split,
         text_column=args.text_column,
@@ -171,6 +187,11 @@ def main():
     convert_to_sglang(args.save_path)
     print("SGLang format conversion done.")
 
+    tokenizer.save_pretrained(args.save_path)
+    config.quantization_config = {
+        "quant_method": "w4afp8",
+    }
+    config.save_pretrained(args.save_path)
 
 if __name__ == "__main__":
     main()
