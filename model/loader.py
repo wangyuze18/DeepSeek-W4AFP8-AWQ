@@ -69,7 +69,7 @@ def load_model(args):
         new_state_dict[name] = value
         if not any(
             kw in name
-            for kw in ["norm", "lm_head", "embed_tokens", ".mlp.gate.", ".indexer.weights_proj" , ]
+            for kw in ["norm", "lm_head", "embed_tokens", ".mlp.gate.", "weights_proj" , ]
         ):
             prefix = name.split(".weight")[0]
             new_state_dict[prefix + ".weight_scale_inv"] = None

@@ -522,7 +522,7 @@ class AwqQuantizer:
                 continue
             if any(
                 kw in layer_name
-                for kw in ["norm", "lm_head", "embed_tokens", ".mlp.gate."]
+                for kw in ["norm", "lm_head", "embed_tokens", ".mlp.gate.", "weights_proj"]
             ):
                 continue
 
