@@ -260,7 +260,7 @@ def weight_cast_to_fp8(x, block_size=128):
 # ---------------------------------------------------------------------------
 
 @triton.jit
-def weight_cast_to_bf16_kernel(x_ptr, s_ptr, y_ptr, M, N, BLOCK_SIZE: tl.constexpr):
+def weight_cast_to_fp32_kernel(x_ptr, s_ptr, y_ptr, M, N, BLOCK_SIZE: tl.constexpr):
     """2D block-wise FP8 dequantization using scale factors."""
     pid_m = tl.program_id(axis=0)
     pid_n = tl.program_id(axis=1)
@@ -275,7 +275,7 @@ def weight_cast_to_bf16_kernel(x_ptr, s_ptr, y_ptr, M, N, BLOCK_SIZE: tl.constex
     tl.store(y_ptr + offs, y, mask=mask)
 
 
-def weight_cast_to_bf16(x, s, block_size=128):
+def weight_cast_to_fp32(x, s, block_size=128):
     """
     Dequantize an FP8 weight tensor back to the default float dtype (typically BF16).
 
@@ -290,12 +290,12 @@ def weight_cast_to_bf16(x, s, block_size=128):
     assert x.is_contiguous() and s.is_contiguous(), "Input tensors must be contiguous"
     assert x.dim() == 2 and s.dim() == 2, "Input tensors must have 2 dimensions"
     M, N = x.size()
-    y = torch.empty_like(x, dtype=torch.get_default_dtype())
+    y = torch.empty_like(x, dtype=torch.float32)
     grid = lambda meta: (  # noqa
         triton.cdiv(M, meta["BLOCK_SIZE"]),
         triton.cdiv(N, meta["BLOCK_SIZE"]),
     )
-    weight_cast_to_bf16_kernel[grid](x, s, y, M, N, BLOCK_SIZE=block_size)
+    weight_cast_to_fp32_kernel[grid](x, s, y, M, N, BLOCK_SIZE=block_size)
     return y
 
 

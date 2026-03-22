@@ -558,7 +558,7 @@ class AwqQuantizer:
                 real_weight_int4, requires_grad=False
             )
             layer_obj.weight_scale_inv = torch.nn.Parameter(
-                max_value_group_wise / 8, requires_grad=False
+                max_value_group_wise / 7.0, requires_grad=False
             )
 
         for layer_name, layer_obj in named_linears.items():
