@@ -2,6 +2,35 @@
 
 **DeepSeek-W4AFP8-AWQ** is a quantization toolkit that applies [AWQ (Activation-aware Weight Quantization)](https://arxiv.org/abs/2306.00978) to Mixture-of-Experts LLMs, specifically targeting **DeepSeek-V3** and its variants. It produces a mixed-precision model where MoE expert layers are quantized to **INT4** (group-wise, packed into INT8 storage) and other linear layers are quantized to **FP8** (E4M3FN, block-wise), enabling efficient deployment via [SGLang](https://github.com/sgl-project/sglang)  serving frameworks.
 
+<div align="center">
+  <!-- 图片 -->
+  <img src="assets/awq.png" width="95%" height="auto">
+  <!-- 换行 + 居中的小标题（h3层级，和###效果一致） -->
+  <br>
+  <p>AWQ</p>
+</div>
+<div align="center">
+  <!-- 图片 -->
+  <img src="assets/structure.png" width="85%" height="auto">
+  <!-- 换行 + 居中的小标题（h3层级，和###效果一致） -->
+  <br>
+  <p>W4AFP8 Quantization</p>
+</div>
+
+# Benchmark
+
+We evaluate the quantized models on **GSM8K** (5-shot) and **MMLU** (5-shot).
+
+| Model | GSM8K (1319) | MMLU (14042) | Avg |
+|:---------:|:---:|:---:|:---:|
+| DeepSeek-V3.2-FP8 | 0.950 | 0.882 | 0.9160 |
+| DeepSeek-V3.2-RTN-W4AFP8 | 0.942 (↓0.008) | 0.867 (↓0.015) | 0.9045(↓0.0115) |
+| DeepSeek-V3.2-AWQ-W4AFP8 | **0.947** (↓0.003) | **0.878** (↓0.004) | **0.9125**(↓0.0035) |
+
+> Compared to RTN, AWQ reduces the average accuracy gap from **1.15%** to  **0.35%**, recovering **~70%** of the quantization loss.
+
+
+
 ## Highlights
 
 - **MoE-aware AWQ**: Jointly searches for optimal per-channel scaling across all experts and the shared expert in each MoE block, preserving gating behavior.
@@ -9,6 +38,7 @@
 - **Multiple calibration datasets**: Built-in support for PileVal, UltraChat, C4, WikiText-2, and ShareGPT-GPT4.
 - **SGLang-ready output**: Automatically converts saved checkpoints to SGLang's expected key naming convention.
 - **Memory-efficient**: Chunked loss computation, optional batched calibration, and layer-by-layer quantization keep peak GPU memory manageable even for 671B-parameter models.
+
 
 ## Project Structure
 
@@ -33,7 +63,9 @@ MoE-AWQ/
 ├── modules/qlinear/
 │   └── kernel.py                        # Triton FP8 quantization kernels
 └── models/
-    └── modeling_deepseek_v3_dot_1.py    # DeepSeek-V3 model architecture
+    ├── modeling_deepseek_v3_dot_1.py    # DeepSeek-V3.1 model architecture
+    ├── configuration_deepseek_v3_dot_2.py  # DeepSeek-V3.2 configuration file
+    └── modeling_deepseek_v3_dot_2.py       # DeepSeek-V3.2 model architecture file
 ```
 
 ## Requirements
