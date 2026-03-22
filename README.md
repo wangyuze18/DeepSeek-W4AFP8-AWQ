@@ -4,14 +4,14 @@
 
 <div align="center">
   <!-- 图片 -->
-  <img src="assets/awq.png" width="95%" height="auto">
+  <img src="assets/awq.png" width="95%" height="95%">
   <!-- 换行 + 居中的小标题（h3层级，和###效果一致） -->
   <br>
   <p>AWQ</p>
 </div>
 <div align="center">
   <!-- 图片 -->
-  <img src="assets/structure.png" width="85%" height="auto">
+  <img src="assets/structure.png" width="85%" height="85%">
   <!-- 换行 + 居中的小标题（h3层级，和###效果一致） -->
   <br>
   <p>W4AFP8 Quantization</p>
